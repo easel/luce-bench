@@ -12,37 +12,57 @@ single-case multi-mode `lucebench-probe` CLI shipped. `swe-bench`
 (verified-execution sandbox) is the remaining gap; not in scope for
 the standalone bench package.
 
+## Quick start (one command)
+
+The fastest path is `uvx`, which fetches and runs without polluting
+your env:
+
+```bash
+# Bench every stdlib area against your local server in one go
+uvx luce-bench --sweep --name my-machine --base-url http://127.0.0.1:8000
+
+# Or run a single area
+uvx luce-bench --area ds4-eval --base-url http://127.0.0.1:8000
+
+# Or against OpenRouter
+export OPENROUTER_API_KEY=sk-or-...
+uvx luce-bench --sweep --name or-baseline \
+  --base-url https://openrouter.ai/api \
+  --model qwen/qwen3.6-27b --auth-env OPENROUTER_API_KEY
+```
+
+The sweep writes per-area JSON and a combined `_summary.md` table
+under `./snapshots/<name>/`. Each row carries the full request +
+response payload + timings (when surfaced by the server).
+
 ## Install
 
 ```bash
-pip install luce-bench           # core, stdlib-only
-pip install luce-bench[forge]    # + anthropic SDK for tool-calling eval
-pip install luce-bench[dev]      # + pytest, ruff for contributors
+uvx luce-bench                    # one-shot, no venv pollution
+uv add luce-bench                 # add to a uv-managed project
+pip install luce-bench            # plain pip
+pip install 'luce-bench[forge]'   # + anthropic SDK for tool-calling area
+pip install 'luce-bench[dev]'     # + pytest, ruff for contributors
 ```
 
-Or with uv:
+## More examples
 
 ```bash
-uv add luce-bench
-```
-
-## Quick start
-
-```bash
-# Run the ds4-eval-92 corpus against any OpenAI-compatible server
-lucebench --url http://localhost:8080 --area ds4-eval --model my-model
-
 # Single case, json-out for downstream analysis
-lucebench --url http://localhost:8080 --area ds4-eval --case-id aime2025-02 \
-  --json-out /tmp/aime02.json
+luce-bench --area ds4-eval --case-id aime2025-02 \
+  --base-url http://localhost:8080 --json-out /tmp/aime02.json
 
-# HumanEval-style code completion (10 prompts, decode-only parse check)
-lucebench --url http://localhost:8080 --area code --model my-model
+# Limit to a subset for smoke (sweep mode honors --questions per area)
+luce-bench --sweep --name smoke --questions 2 \
+  --base-url http://localhost:8080
 
-# Against OpenRouter with auth + sequential pacing
-export OPENROUTER_API_KEY=sk-or-...
-lucebench --url https://openrouter.ai/api --model qwen/qwen3.6-27b \
-  --area ds4-eval --auth-env OPENROUTER_API_KEY --no-think
+# Parallel against a stateless gateway (skip on single-GPU servers)
+luce-bench --area ds4-eval --base-url https://openrouter.ai/api \
+  --model openai/gpt-5.4 --auth-env OPENROUTER_API_KEY --parallel 8
+
+# Single-case multi-mode reasoning probe (think/nothink/budget=N/...)
+luce-bench-probe --case-id aime2025-02 \
+  --url http://localhost:8080 --out-dir ./probes/my-model
 ```
 
 ## What's benchmarked

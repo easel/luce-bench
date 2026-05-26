@@ -80,18 +80,149 @@ def format_row(idx: int, row: dict, graded: dict) -> str:
             f"wall={wall:.2f}s {tps:.0f}tps")
 
 
+def _run_sweep(args) -> int:
+    """Run every stdlib area in sequence, write per-area + combined JSON.
+
+    Layout:
+        <out_dir>/<name>/
+            ds4-eval.json
+            code.json
+            longctx.json
+            agent.json
+            _summary.json    # {areas: [{area, n, pass, rate, wall_s}, ...]}
+            _summary.md
+    """
+    import datetime as _dt
+
+    name = args.name or _dt.date.today().isoformat() + "-sweep"
+    out_root = args.out_dir / name
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    # Stdlib areas only — forge needs `[forge]` extra and a different
+    # runner path. Operators who want forge add `--area forge` after
+    # ensuring the extra is installed.
+    sweep_areas = ["ds4-eval", "code", "longctx", "agent"]
+    auth_header = ""
+    if args.auth_env:
+        token = os.environ.get(args.auth_env, "")
+        if not token:
+            print(f"--auth-env {args.auth_env}: env var is empty or unset",
+                  file=sys.stderr)
+            return 2
+        auth_header = f"Bearer {token}"
+
+    print(f"[lucebench] v{__version__} sweep name={name} "
+          f"areas={','.join(sweep_areas)} url={args.url} model={args.model} "
+          f"out={out_root}", flush=True)
+
+    summary_areas: list[dict[str, Any]] = []
+    for area in sweep_areas:
+        cfg = AREAS[area]
+        cases = cfg["load"]()
+        cases = select_cases(cases, questions=args.questions)
+        max_tokens = (args.max_tokens if args.max_tokens is not None
+                      else cfg["default_max_tokens"])
+        think = (args.think if args.think is not None
+                 else cfg["default_thinking"])
+        print(f"\n[lucebench] === area={area} cases={len(cases)} think={think} "
+              f"max_tokens={max_tokens} ===", flush=True)
+
+        rows: list[dict[str, Any]] = []
+        for idx, case in enumerate(cases, start=1):
+            row = run_case(
+                url=args.url, case=case,
+                timeout_s=args.timeout, max_tokens=max_tokens, think=think,
+                model=args.model, auth_header=auth_header,
+                temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
+            )
+            graded = cfg["grade"](case, row)
+            row["pass"] = graded.get("pass", False)
+            row["graded"] = graded
+            rows.append(row)
+            print(format_row(idx, row, graded), flush=True)
+
+        pass_n = sum(1 for r in rows if r["pass"])
+        rate = 100 * pass_n / len(rows) if rows else 0
+        walls = [r.get("wall_seconds") or 0 for r in rows]
+        wall_total = sum(walls)
+        wall_median = statistics.median(walls) if walls else 0
+        print(f"[lucebench] area={area} pass_rate={rate:.2f}% "
+              f"({pass_n}/{len(rows)}) wall_total={wall_total:.0f}s",
+              flush=True)
+
+        # Per-area JSON
+        terse = [{k: v for k, v in r.items() if k != "_response"} for r in rows]
+        (out_root / f"{area}.json").write_text(json.dumps({
+            "lucebench_version": __version__,
+            "area": area, "url": args.url, "model": args.model,
+            "think": think, "max_tokens": max_tokens,
+            "n": len(rows), "pass": pass_n, "pass_rate": rate,
+            "wall_total": wall_total, "wall_median": wall_median,
+            "rows": terse,
+        }, indent=2))
+        summary_areas.append({
+            "area": area, "n": len(rows), "pass": pass_n,
+            "rate": rate, "wall_total": wall_total,
+            "wall_median": wall_median,
+        })
+
+    # Combined summary
+    summary = {
+        "lucebench_version": __version__,
+        "name": name,
+        "url": args.url,
+        "model": args.model,
+        "areas": summary_areas,
+    }
+    (out_root / "_summary.json").write_text(json.dumps(summary, indent=2))
+
+    md_lines = [
+        f"# luce-bench sweep — {name}",
+        "",
+        f"- url:   `{args.url}`",
+        f"- model: `{args.model}`",
+        f"- lucebench v{__version__}",
+        "",
+        "| area | n | pass | rate | wall_total | wall_median |",
+        "|------|---|------|------|------------|-------------|",
+    ]
+    for a in summary_areas:
+        md_lines.append(
+            f"| {a['area']} | {a['n']} | {a['pass']} | "
+            f"{a['rate']:.1f}% | {a['wall_total']:.0f}s | {a['wall_median']:.1f}s |"
+        )
+    (out_root / "_summary.md").write_text("\n".join(md_lines) + "\n")
+
+    print(f"\n[lucebench] sweep complete → {out_root}", flush=True)
+    print("\n".join(md_lines), flush=True)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         prog="lucebench",
         description="Capability benchmarks for chat-completion endpoints.",
     )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    ap.add_argument("--url", default="http://127.0.0.1:8080",
+    ap.add_argument("--url", "--base-url", dest="url",
+                    default="http://127.0.0.1:8080",
                     help="Server base URL (default: http://127.0.0.1:8080).")
     ap.add_argument("--model", default="default",
                     help="Model identifier sent in the request body.")
-    ap.add_argument("--area", required=True, choices=sorted(set(AREAS) | {"forge"}),
-                    help="Evaluation area to run.")
+    ap.add_argument("--area", choices=sorted(set(AREAS) | {"forge"}),
+                    help="Evaluation area to run. Required unless --sweep is set.")
+    ap.add_argument("--sweep", action="store_true",
+                    help="Run all stdlib areas (ds4-eval, code, longctx, agent) "
+                         "in sequence. Forge requires --area forge explicitly "
+                         "since it needs the [forge] extra.")
+    ap.add_argument("--name", default=None,
+                    help="Label for snapshot directory under --out-dir. "
+                         "Common pattern: machine + model tag, e.g. "
+                         "`bragi-gemma4-26b-2026-05-26`.")
+    ap.add_argument("--out-dir", type=Path, default=Path("./snapshots"),
+                    help="Root directory for sweep snapshots. Each area writes "
+                         "<out-dir>/<name>/<area>.json and a combined "
+                         "_summary.json. Default: ./snapshots")
     ap.add_argument("--questions", type=int, default=None,
                     help="Limit to first N cases (after other filters).")
     ap.add_argument("--case-id", default=None,
@@ -122,6 +253,15 @@ def main() -> int:
     args = ap.parse_args()
     if args.parallel < 1:
         ap.error("--parallel must be >= 1")
+    if not args.area and not args.sweep:
+        ap.error("one of --area or --sweep is required")
+    if args.sweep and args.area:
+        ap.error("--area and --sweep are mutually exclusive — pick one")
+
+    # ── Sweep mode: run all stdlib areas sequentially, write into a
+    # snapshot dir keyed on --name (default: today's date + a sweep tag).
+    if args.sweep:
+        return _run_sweep(args)
 
     # Forge takes a completely different path — it owns its own runner
     # (recording AnthropicClient + scenario driver) instead of using

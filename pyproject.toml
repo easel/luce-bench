@@ -29,7 +29,12 @@ dev = [
 ]
 
 [project.scripts]
+# Primary entry point — name matches the package so `uvx luce-bench`
+# Just Works. Keep `lucebench` as a back-compat alias for users who
+# remember the no-dash form.
+luce-bench = "lucebench.cli:main"
 lucebench = "lucebench.cli:main"
+luce-bench-probe = "lucebench.probe:main"
 lucebench-probe = "lucebench.probe:main"
 
 [project.urls]
