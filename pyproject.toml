@@ -36,6 +36,8 @@ luce-bench = "lucebench.cli:main"
 lucebench = "lucebench.cli:main"
 luce-bench-probe = "lucebench.probe:main"
 lucebench-probe = "lucebench.probe:main"
+luce-bench-report = "lucebench.report:main"
+lucebench-report = "lucebench.report:main"
 
 [project.urls]
 Homepage = "https://github.com/easel/luce-bench"

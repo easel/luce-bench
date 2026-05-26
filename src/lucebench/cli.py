@@ -17,9 +17,46 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import json as _json
+import urllib.error
+import urllib.request
+
 from lucebench import __version__
 from lucebench.areas import agent, ds4_eval, humaneval, longctx
 from lucebench.runner import run_case
+
+
+def resolve_model(url: str, auth_header: str = "",
+                  timeout_s: int = 10) -> str | None:
+    """Pick a model id by probing the server's /v1/models endpoint.
+
+    Returns:
+      * the single model id if the server exposes exactly one
+      * None if the server exposes zero, multiple, or doesn't speak the
+        OpenAI /v1/models shape
+
+    The caller decides whether to fall back to a hard default or error
+    out. We deliberately don't pick one when multiple are exposed —
+    silently picking would mask user mistakes (e.g. forgetting to set
+    --model when a gateway exposes 200+ models).
+    """
+    req = urllib.request.Request(url.rstrip("/") + "/v1/models",
+                                 headers={"Accept": "application/json"})
+    if auth_header:
+        req.add_header("Authorization", auth_header)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            data = _json.loads(resp.read())
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    models = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(models, list) or len(models) != 1:
+        return None
+    entry = models[0]
+    if not isinstance(entry, dict):
+        return None
+    mid = entry.get("id")
+    return mid if isinstance(mid, str) and mid else None
 
 AREAS = {
     "ds4-eval": {
@@ -208,7 +245,13 @@ def main() -> int:
                     default="http://127.0.0.1:8080",
                     help="Server base URL (default: http://127.0.0.1:8080).")
     ap.add_argument("--model", default="default",
-                    help="Model identifier sent in the request body.")
+                    help="Model identifier sent in the request body. "
+                         "When left as the literal string 'default', "
+                         "the CLI queries `<base-url>/v1/models` and "
+                         "auto-picks the single exposed model. If the "
+                         "server exposes zero or multiple, it falls back "
+                         "to the literal 'default' (which most servers "
+                         "404 on — pass --model explicitly for gateways).")
     ap.add_argument("--area", choices=sorted(set(AREAS) | {"forge"}),
                     help="Evaluation area to run. Required unless --sweep is set.")
     ap.add_argument("--sweep", action="store_true",
@@ -257,6 +300,26 @@ def main() -> int:
         ap.error("one of --area or --sweep is required")
     if args.sweep and args.area:
         ap.error("--area and --sweep are mutually exclusive — pick one")
+
+    # /v1/models auto-resolution. Only fires when the user left --model
+    # at the literal default; an explicit value (even if wrong) is
+    # respected so gateways with hundreds of models stay predictable.
+    if args.model == "default":
+        auth_for_probe = ""
+        if args.auth_env:
+            token = os.environ.get(args.auth_env, "")
+            if token:
+                auth_for_probe = f"Bearer {token}"
+        resolved = resolve_model(args.url, auth_header=auth_for_probe)
+        if resolved:
+            print(f"[lucebench] --model default → resolved to '{resolved}' "
+                  f"via {args.url}/v1/models", flush=True)
+            args.model = resolved
+        else:
+            print(f"[lucebench] --model default: /v1/models at {args.url} "
+                  "didn't expose exactly one model — sending 'default' as-is. "
+                  "Most servers will 404 on this; pass --model explicitly.",
+                  file=sys.stderr, flush=True)
 
     # ── Sweep mode: run all stdlib areas sequentially, write into a
     # snapshot dir keyed on --name (default: today's date + a sweep tag).
