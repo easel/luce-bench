@@ -100,3 +100,50 @@ def test_grade_humaneval_fail():
     row = {"content": "this is not python @@"}
     g = humaneval.grade_humaneval_case(case, row)
     assert g["pass"] is False
+
+
+def test_longctx_cases_load():
+    from lucebench.areas import longctx
+    assert len(longctx.LONGCTX_CASES) >= 5
+    for c in longctx.LONGCTX_CASES:
+        assert c["kind"] == "longctx-frontier"
+        assert "prompt" in c
+        assert "target_tokens" in c
+
+
+def test_agent_cases_load():
+    from lucebench.areas import agent
+    cases = agent.load_agent_cases()
+    assert len(cases) >= 1
+    for c in cases:
+        assert c["kind"] == "agent-prompt"
+        # system_prompt should be loaded from disk fixture
+        assert c.get("system_prompt"), c
+        assert c.get("user_message"), c
+
+
+def test_grade_longctx_pass():
+    from lucebench.areas import longctx
+    case = {"id": "x", "kind": "longctx-frontier",
+            "prompt": "irrelevant", "target_tokens": 2048}
+    row = {"content": "Risk: the haystack contains nothing actionable."}
+    g = longctx.grade_longctx_case(case, row)
+    assert g["pass"] is True
+
+
+def test_grade_longctx_fail():
+    from lucebench.areas import longctx
+    case = {"id": "x", "kind": "longctx-frontier",
+            "prompt": "irrelevant", "target_tokens": 2048}
+    row = {"content": "I think the risk is..."}  # missing "Risk:" prefix
+    g = longctx.grade_longctx_case(case, row)
+    assert g["pass"] is False
+
+
+def test_grade_agent_codeblock_pass():
+    from lucebench.areas import agent
+    case = {"id": "x", "kind": "agent-prompt",
+            "system_prompt": "be an agent", "user_message": "fix foo.py"}
+    row = {"content": "Here's a fix:\n```python\nprint('hi')\n```"}
+    g = agent.grade_agent_case(case, row)
+    assert g["pass"] is True

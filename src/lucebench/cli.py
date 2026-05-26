@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from lucebench import __version__
-from lucebench.areas import ds4_eval, humaneval
+from lucebench.areas import agent, ds4_eval, humaneval, longctx
 from lucebench.runner import run_case
 
 AREAS = {
@@ -32,6 +32,18 @@ AREAS = {
         "load": humaneval.load_humaneval_cases,
         "grade": humaneval.grade_humaneval_case,
         "default_max_tokens": 2048,
+        "default_thinking": False,
+    },
+    "longctx": {
+        "load": lambda: longctx.LONGCTX_CASES,
+        "grade": longctx.grade_longctx_case,
+        "default_max_tokens": 256,
+        "default_thinking": False,
+    },
+    "agent": {
+        "load": agent.load_agent_cases,
+        "grade": agent.grade_agent_case,
+        "default_max_tokens": 4096,
         "default_thinking": False,
     },
 }
@@ -78,7 +90,7 @@ def main() -> int:
                     help="Server base URL (default: http://127.0.0.1:8080).")
     ap.add_argument("--model", default="default",
                     help="Model identifier sent in the request body.")
-    ap.add_argument("--area", required=True, choices=sorted(AREAS),
+    ap.add_argument("--area", required=True, choices=sorted(set(AREAS) | {"forge"}),
                     help="Evaluation area to run.")
     ap.add_argument("--questions", type=int, default=None,
                     help="Limit to first N cases (after other filters).")
@@ -102,7 +114,50 @@ def main() -> int:
                          "(e.g. OPENAI_API_KEY, OPENROUTER_API_KEY).")
     ap.add_argument("--json-out", type=Path, default=None,
                     help="Write the per-case rows as a JSON array to this path.")
+    ap.add_argument("--parallel", type=int, default=1,
+                    help="Run up to N cases concurrently. Default 1 "
+                         "(sequential). Safe to raise for stateless HTTP "
+                         "gateways (OpenRouter); leave at 1 for single-GPU "
+                         "local servers since concurrent requests just queue.")
     args = ap.parse_args()
+    if args.parallel < 1:
+        ap.error("--parallel must be >= 1")
+
+    # Forge takes a completely different path — it owns its own runner
+    # (recording AnthropicClient + scenario driver) instead of using
+    # run_case + a grader. Dispatch early.
+    if args.area == "forge":
+        from lucebench.areas.forge import run_forge_area
+        max_tokens = args.max_tokens if args.max_tokens is not None else 4096
+        auth_header = ""
+        if args.auth_env:
+            token = os.environ.get(args.auth_env, "")
+            if not token:
+                ap.error(f"--auth-env {args.auth_env}: env var is empty or unset")
+            auth_header = f"Bearer {token}"
+        rows, summary = run_forge_area(
+            url=args.url, model=args.model, max_tokens=max_tokens,
+            timeout_s=args.timeout, auth_header=auth_header,
+            tags=None, names=None, questions=args.questions,
+        )
+        for idx, r in enumerate(rows, start=1):
+            verdict = "PASS" if r.get("pass") else "FAIL"
+            print(f"  {idx:3d} {verdict} forge   {r['case_id']:32s} "
+                  f"wall={r['wall_seconds']:.2f}s "
+                  f"calls={len(r.get('iterations') or [])}",
+                  flush=True)
+        print(f"\n[lucebench] forge pass_rate={summary['pass_rate']:.2f}% "
+              f"({summary['n_pass']}/{summary['n_scenarios']})",
+              flush=True)
+        if args.json_out:
+            args.json_out.parent.mkdir(parents=True, exist_ok=True)
+            args.json_out.write_text(json.dumps({
+                "lucebench_version": __version__,
+                "area": "forge", "url": args.url, "model": args.model,
+                **summary, "rows": rows,
+            }, indent=2, default=str))
+            print(f"[lucebench] wrote {len(rows)} rows to {args.json_out}", flush=True)
+        return 0
 
     cfg = AREAS[args.area]
     cases = cfg["load"]()
@@ -132,8 +187,8 @@ def main() -> int:
           f"url={args.url} model={args.model} think={think} max_tokens={max_tokens}",
           flush=True)
 
-    rows: list[dict[str, Any]] = []
-    for idx, case in enumerate(selected, start=1):
+    def _do(idx_case):
+        idx, case = idx_case
         row = run_case(
             url=args.url, case=case,
             timeout_s=args.timeout, max_tokens=max_tokens, think=think,
@@ -143,8 +198,31 @@ def main() -> int:
         graded = cfg["grade"](case, row)
         row["pass"] = graded.get("pass", False)
         row["graded"] = graded
-        rows.append(row)
-        print(format_row(idx, row, graded), flush=True)
+        row["_idx"] = idx
+        return row, graded
+
+    rows: list[dict[str, Any]] = []
+    if args.parallel > 1:
+        # Parallel runner: stateless HTTP gateways (OpenRouter etc.) can
+        # serve many concurrent requests. Local single-GPU servers just
+        # queue them. Output streams "as completed" but the JSON-out rows
+        # are sorted back to selection order so snapshots stay deterministic.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=args.parallel) as pool:
+            futures = {pool.submit(_do, (i, c)): (i, c)
+                       for i, c in enumerate(selected, start=1)}
+            for fut in as_completed(futures):
+                row, graded = fut.result()
+                rows.append(row)
+                print(format_row(row["_idx"], row, graded), flush=True)
+        rows.sort(key=lambda r: r["_idx"])
+    else:
+        for idx, case in enumerate(selected, start=1):
+            row, graded = _do((idx, case))
+            rows.append(row)
+            print(format_row(idx, row, graded), flush=True)
+    for r in rows:
+        r.pop("_idx", None)
 
     pass_n = sum(1 for r in rows if r["pass"])
     rate = 100 * pass_n / len(rows) if rows else 0

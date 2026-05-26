@@ -1,6 +1,6 @@
 [project]
 name = "luce-bench"
-version = "0.1.0"
+version = "0.2.0"
 description = "Capability benchmarks for chat-completion endpoints (ds4-eval, HumanEval, long-context, forge)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -30,6 +30,7 @@ dev = [
 
 [project.scripts]
 lucebench = "lucebench.cli:main"
+lucebench-probe = "lucebench.probe:main"
 
 [project.urls]
 Homepage = "https://github.com/easel/luce-bench"
@@ -52,6 +53,12 @@ include = ["src/lucebench", "README.md", "LICENSE", "NOTICE", "tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# Vendored upstream code is preserved verbatim — exclude from lint so
+# we don't accumulate style noise we don't own. Re-include if we ever
+# fork upstream meaningfully.
+extend-exclude = [
+    "src/lucebench/fixtures/forge_eval",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "B", "UP"]

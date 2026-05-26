@@ -6,8 +6,11 @@ Capability benchmarks for chat-completion endpoints. Sister of
 so external users can `pip install luce-bench` and benchmark any
 OpenAI-compatible endpoint.
 
-**Status**: v0.1 — `ds4-eval` and `code` (HumanEval-port) areas
-landed. `longctx`, `agent`, `forge`, and `swe-bench` follow.
+**Status**: v0.2 — `ds4-eval`, `code`, `longctx`, `agent`, and
+`forge` (tool-calling) areas landed; parallel execution + a
+single-case multi-mode `lucebench-probe` CLI shipped. `swe-bench`
+(verified-execution sandbox) is the remaining gap; not in scope for
+the standalone bench package.
 
 ## Install
 
@@ -48,6 +51,9 @@ lucebench --url https://openrouter.ai/api --model qwen/qwen3.6-27b \
 |------|-------|--------|--------|
 | `ds4-eval` | 92 (GPQA Diamond, SuperGPQA, AIME2025, COMPSEC) | strict `Answer: X` format extract | [antirez/ds4](https://github.com/antirez/ds4) (MIT) |
 | `code` | 10 (mid-function completion) | `ast.parse(prompt + completion)` | [openai/human-eval](https://github.com/openai/human-eval) (MIT) port |
+| `longctx` | 6 frontiers (2k → 64k tokens) | `^Risk:` prefix check | own ports |
+| `agent` | N codex-style prompts paired with coding tasks | code-fence / json-tool / apply_patch detect | own ports |
+| `forge` | 7+ tool-calling scenarios | error_type == None | [antoinezambelli/forge](https://github.com/antoinezambelli/forge) 0.7.1 (MIT) |
 
 Each row in the result carries:
 
