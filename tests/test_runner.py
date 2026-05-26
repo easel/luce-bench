@@ -19,11 +19,9 @@ import io
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from lucebench.cli import resolve_model
 from lucebench.runner import DEFAULT_SYSTEM_PROMPT, build_prompt, run_case
-
 
 # ────────────────────────────────────────────────────────────────────
 # Helpers
@@ -333,9 +331,3 @@ def test_resolve_model_attaches_auth_header_when_provided():
         resolve_model("http://localhost:8080", auth_header="Bearer sk-or-test")
     auth = captured["headers"].get("Authorization") or captured["headers"].get("authorization")
     assert auth == "Bearer sk-or-test"
-
-
-# Marker fixture so `pytest --collect-only` sees this file in the right place.
-@pytest.fixture(autouse=False)
-def _unused_marker():
-    yield
