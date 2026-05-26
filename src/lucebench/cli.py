@@ -11,15 +11,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import json as _json
 import os
 import statistics
 import sys
-from pathlib import Path
-from typing import Any
-
-import json as _json
 import urllib.error
 import urllib.request
+from pathlib import Path
+from typing import Any
 
 from lucebench import __version__
 from lucebench.areas import agent, ds4_eval, humaneval, longctx
