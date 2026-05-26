@@ -41,8 +41,13 @@ def test_humaneval_cases_load():
 
 
 def test_grade_ds4_choice_pass():
-    case = {"id": "x", "source": "GPQA Diamond", "kind": "choice",
-            "answer": "B", "choices": ["A1", "A2", "A3", "A4"]}
+    case = {
+        "id": "x",
+        "source": "GPQA Diamond",
+        "kind": "choice",
+        "answer": "B",
+        "choices": ["A1", "A2", "A3", "A4"],
+    }
     row = {"content": "I think the answer is B because...\nAnswer: B"}
     g = ds4_eval.grade_case(case, row)
     assert g["pass"] is True
@@ -86,8 +91,7 @@ def test_grade_ds4_integer_unmarked_permissive():
 
 
 def test_grade_humaneval_pass():
-    case = {"id": "x", "area": "code", "kind": "code-completion",
-            "prompt": "def add(a, b):\n    "}
+    case = {"id": "x", "area": "code", "kind": "code-completion", "prompt": "def add(a, b):\n    "}
     row = {"content": "return a + b\n"}
     g = humaneval.grade_humaneval_case(case, row)
     assert g["pass"] is True
@@ -95,8 +99,7 @@ def test_grade_humaneval_pass():
 
 
 def test_grade_humaneval_fail():
-    case = {"id": "x", "area": "code", "kind": "code-completion",
-            "prompt": "def add(a, b):\n    "}
+    case = {"id": "x", "area": "code", "kind": "code-completion", "prompt": "def add(a, b):\n    "}
     row = {"content": "this is not python @@"}
     g = humaneval.grade_humaneval_case(case, row)
     assert g["pass"] is False
@@ -104,6 +107,7 @@ def test_grade_humaneval_fail():
 
 def test_longctx_cases_load():
     from lucebench.areas import longctx
+
     assert len(longctx.LONGCTX_CASES) >= 5
     for c in longctx.LONGCTX_CASES:
         assert c["kind"] == "longctx-frontier"
@@ -113,6 +117,7 @@ def test_longctx_cases_load():
 
 def test_agent_cases_load():
     from lucebench.areas import agent
+
     cases = agent.load_agent_cases()
     assert len(cases) >= 1
     for c in cases:
@@ -124,8 +129,8 @@ def test_agent_cases_load():
 
 def test_grade_longctx_pass():
     from lucebench.areas import longctx
-    case = {"id": "x", "kind": "longctx-frontier",
-            "prompt": "irrelevant", "target_tokens": 2048}
+
+    case = {"id": "x", "kind": "longctx-frontier", "prompt": "irrelevant", "target_tokens": 2048}
     row = {"content": "Risk: the haystack contains nothing actionable."}
     g = longctx.grade_longctx_case(case, row)
     assert g["pass"] is True
@@ -133,8 +138,8 @@ def test_grade_longctx_pass():
 
 def test_grade_longctx_fail():
     from lucebench.areas import longctx
-    case = {"id": "x", "kind": "longctx-frontier",
-            "prompt": "irrelevant", "target_tokens": 2048}
+
+    case = {"id": "x", "kind": "longctx-frontier", "prompt": "irrelevant", "target_tokens": 2048}
     row = {"content": "I think the risk is..."}  # missing "Risk:" prefix
     g = longctx.grade_longctx_case(case, row)
     assert g["pass"] is False
@@ -142,8 +147,13 @@ def test_grade_longctx_fail():
 
 def test_grade_agent_codeblock_pass():
     from lucebench.areas import agent
-    case = {"id": "x", "kind": "agent-prompt",
-            "system_prompt": "be an agent", "user_message": "fix foo.py"}
+
+    case = {
+        "id": "x",
+        "kind": "agent-prompt",
+        "system_prompt": "be an agent",
+        "user_message": "fix foo.py",
+    }
     row = {"content": "Here's a fix:\n```python\nprint('hi')\n```"}
     g = agent.grade_agent_case(case, row)
     assert g["pass"] is True

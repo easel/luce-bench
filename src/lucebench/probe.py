@@ -61,8 +61,9 @@ SYSTEM_TERSE = (
 )
 
 
-def build_body(model: str, case: dict, mode: str, max_tokens: int,
-               temperature: float, top_p: float, top_k: int) -> dict:
+def build_body(
+    model: str, case: dict, mode: str, max_tokens: int, temperature: float, top_p: float, top_k: int
+) -> dict:
     user = case["question"]
     body: dict = {
         "model": model,
@@ -111,8 +112,7 @@ def build_body(model: str, case: dict, mode: str, max_tokens: int,
         # tests whether ours does.
         body["thinking"] = {"type": "disabled"}
         body["chat_template_kwargs"] = {"enable_thinking": False}
-        body["messages"].append({"role": "assistant",
-                                 "content": "The answer is "})
+        body["messages"].append({"role": "assistant", "content": "The answer is "})
     elif mode == "nothink-stop-after-answer":
         # Force a hard stop on tokens that signal "now let me explain".
         # If the model commits to an answer at all, stop before it
@@ -120,8 +120,16 @@ def build_body(model: str, case: dict, mode: str, max_tokens: int,
         body["thinking"] = {"type": "disabled"}
         body["chat_template_kwargs"] = {"enable_thinking": False}
         body["messages"][0]["content"] = SYSTEM_TERSE
-        body["stop"] = ["\nReason", "\nLet", "\nFirst", "\nWe ", "\nTo ",
-                        "Reasoning:", "Explanation:", "Step 1"]
+        body["stop"] = [
+            "\nReason",
+            "\nLet",
+            "\nFirst",
+            "\nWe ",
+            "\nTo ",
+            "Reasoning:",
+            "Explanation:",
+            "Step 1",
+        ]
     else:
         raise SystemExit(f"unknown mode: {mode}")
     return body
@@ -165,10 +173,8 @@ def extract_row(case_id: str, mode: str, body: dict, raw: dict, dur_s: float) ->
 
 
 def render_summary(rows: list[dict]) -> str:
-    cols = ["mode", "prompt", "comp", "think", "content", "reasoning",
-            "finish", "wall_s", "tok/s"]
-    out = [f"| {' | '.join(cols)} |",
-           f"|{'|'.join(['---'] * len(cols))}|"]
+    cols = ["mode", "prompt", "comp", "think", "content", "reasoning", "finish", "wall_s", "tok/s"]
+    out = [f"| {' | '.join(cols)} |", f"|{'|'.join(['---'] * len(cols))}|"]
     for r in rows:
         out.append(
             f"| {r['mode']} "
@@ -191,24 +197,28 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--url", default="http://localhost:8080")
     ap.add_argument("--model", default="dflash")
-    ap.add_argument("--case-id", required=True,
-                    help="ds4-eval case id, e.g. aime2025-02")
-    ap.add_argument("--modes", default=DEFAULT_MODES,
-                    help=f"comma-separated subset of {DEFAULT_MODES}")
-    ap.add_argument("--max-tokens", type=int, default=8192,
-                    help="per-request decode cap")
-    ap.add_argument("--timeout", type=int, default=600,
-                    help="per-request wall timeout (s)")
-    ap.add_argument("--temperature", type=float, default=0.0,
-                    help="sampling temp (default 0 for reproducibility; "
-                         "use the model card's recommended temp to expose "
-                         "sampling-driven failure modes)")
+    ap.add_argument("--case-id", required=True, help="ds4-eval case id, e.g. aime2025-02")
+    ap.add_argument(
+        "--modes", default=DEFAULT_MODES, help=f"comma-separated subset of {DEFAULT_MODES}"
+    )
+    ap.add_argument("--max-tokens", type=int, default=8192, help="per-request decode cap")
+    ap.add_argument("--timeout", type=int, default=600, help="per-request wall timeout (s)")
+    ap.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="sampling temp (default 0 for reproducibility; "
+        "use the model card's recommended temp to expose "
+        "sampling-driven failure modes)",
+    )
     ap.add_argument("--top-p", type=float, default=1.0)
     ap.add_argument("--top-k", type=int, default=0)
-    ap.add_argument("--seed", type=int, default=0,
-                    help="sampler seed (only meaningful at temperature>0)")
-    ap.add_argument("--out-dir", required=True,
-                    help="snapshot dir to write into (created if missing)")
+    ap.add_argument(
+        "--seed", type=int, default=0, help="sampler seed (only meaningful at temperature>0)"
+    )
+    ap.add_argument(
+        "--out-dir", required=True, help="snapshot dir to write into (created if missing)"
+    )
     args = ap.parse_args()
 
     case = load_case(args.case_id)
@@ -218,8 +228,9 @@ def main() -> int:
 
     rows: list[dict] = []
     for mode in modes:
-        body = build_body(args.model, case, mode, args.max_tokens,
-                          args.temperature, args.top_p, args.top_k)
+        body = build_body(
+            args.model, case, mode, args.max_tokens, args.temperature, args.top_p, args.top_k
+        )
         if args.seed and args.temperature > 0:
             body["seed"] = args.seed
         print(f"  [{mode}] POST ...", flush=True)
@@ -231,14 +242,16 @@ def main() -> int:
             continue
         row = extract_row(args.case_id, mode, body, raw, dur)
         rows.append(row)
-        full = {"case_id": args.case_id, "mode": mode, "request": body,
-                "response": raw, "row": row}
+        full = {"case_id": args.case_id, "mode": mode, "request": body, "response": raw, "row": row}
         (out / f"{mode}.json").write_text(json.dumps(full, indent=2))
-        print(f"  [{mode}] OK prompt={row['prompt_tokens']} "
-              f"comp={row['completion_tokens']} think={row['thinking_tokens']} "
-              f"content_chars={row['content_len_chars']} "
-              f"reasoning_chars={row['reasoning_len_chars']} "
-              f"finish={row['finish_reason']} {row['wall_s']}s", flush=True)
+        print(
+            f"  [{mode}] OK prompt={row['prompt_tokens']} "
+            f"comp={row['completion_tokens']} think={row['thinking_tokens']} "
+            f"content_chars={row['content_len_chars']} "
+            f"reasoning_chars={row['reasoning_len_chars']} "
+            f"finish={row['finish_reason']} {row['wall_s']}s",
+            flush=True,
+        )
 
     summary = {
         "case_id": args.case_id,
@@ -250,8 +263,7 @@ def main() -> int:
     (out / "_summary.json").write_text(json.dumps(summary, indent=2))
     (out / "_summary.md").write_text(
         f"# probe_thinking_control — {args.case_id} on {args.model}\n\n"
-        f"run_at: {summary['run_at']}\nurl: {args.url}\n\n"
-        + render_summary(rows) + "\n"
+        f"run_at: {summary['run_at']}\nurl: {args.url}\n\n" + render_summary(rows) + "\n"
     )
     print("\n" + render_summary(rows))
     return 0

@@ -42,17 +42,19 @@ def load_humaneval_cases(path: Path = FIXTURE_PATH) -> list[dict[str, Any]]:
     raw_list = payload.get("humaneval_prompts") or payload.get("cases") or []
     out = []
     for raw in raw_list:
-        out.append({
-            "area": "code",
-            "source": "HumanEval-port",
-            "id": raw["id"],
-            "kind": raw.get("kind", "code-completion"),
-            "prompt": raw["prompt"],
-            # No reference answer — grading is by-parse, see grade_completion.
-            "answer": None,
-            "domain": "code",
-            "title": raw["id"],
-        })
+        out.append(
+            {
+                "area": "code",
+                "source": "HumanEval-port",
+                "id": raw["id"],
+                "kind": raw.get("kind", "code-completion"),
+                "prompt": raw["prompt"],
+                # No reference answer — grading is by-parse, see grade_completion.
+                "answer": None,
+                "domain": "code",
+                "title": raw["id"],
+            }
+        )
     return out
 
 
@@ -66,8 +68,7 @@ def load_autotune_preflight_prompts(path: Path = FIXTURE_PATH) -> list[tuple[str
     before wasting time on the smaller HE prompts.
     """
     payload = json.loads(path.read_text())
-    return [(p["id"], p["prompt"])
-            for p in (payload.get("autotune_preflight_prompts") or [])]
+    return [(p["id"], p["prompt"]) for p in (payload.get("autotune_preflight_prompts") or [])]
 
 
 HE_CASES = load_humaneval_cases()

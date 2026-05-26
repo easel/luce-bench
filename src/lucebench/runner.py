@@ -31,8 +31,7 @@ def build_prompt(case: dict[str, Any]) -> str:
     if case.get("kind") == "code-completion":
         return (
             "Continue the following Python code. Output ONLY the function "
-            "body — no markdown, no explanation, no extra prose:\n\n"
-            + case["prompt"]
+            "body — no markdown, no explanation, no extra prose:\n\n" + case["prompt"]
         )
     if case.get("kind") == "longctx-frontier":
         return case["prompt"]
@@ -148,8 +147,7 @@ def run_case(
     choice = (data.get("choices") or [{}])[0]
     msg = choice.get("message", {}) if isinstance(choice, dict) else {}
     usage = data.get("usage", {}) or {}
-    finish_details = (choice.get("finish_details")
-                      or msg.get("finish_details") or {})
+    finish_details = choice.get("finish_details") or msg.get("finish_details") or {}
 
     return {
         "case_id": case.get("id"),
@@ -160,8 +158,7 @@ def run_case(
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "content": msg.get("content"),
-        "reasoning_content": msg.get("reasoning_content")
-                              or msg.get("reasoning"),
+        "reasoning_content": msg.get("reasoning_content") or msg.get("reasoning"),
         "finish_reason": choice.get("finish_reason"),
         "finish_details": finish_details,
         "timings": usage.get("timings"),

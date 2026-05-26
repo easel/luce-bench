@@ -59,21 +59,23 @@ def load_agent_cases(path: Path = FIXTURE_PATH) -> list[dict[str, Any]]:
     for raw in payload["cases"]:
         sys_file = SYSTEM_PROMPT_DIR / raw["system_prompt_file"]
         system_prompt = sys_file.read_text() if sys_file.exists() else ""
-        out.append({
-            "area": "agent",
-            "source": "agent-shape-probe",
-            "id": raw["id"],
-            "kind": raw.get("kind", "agent-prompt"),
-            "system_prompt": system_prompt,
-            "user_message": raw["user_message"],
-            # Resolved prompt = system + user; the dispatcher will send as
-            # a two-message chat (system + user) when building the request.
-            # Stored here for traces / readability of the JSON snapshot.
-            "answer": None,
-            "domain": "agent",
-            "title": raw["id"],
-            "_system_prompt_file": raw["system_prompt_file"],
-        })
+        out.append(
+            {
+                "area": "agent",
+                "source": "agent-shape-probe",
+                "id": raw["id"],
+                "kind": raw.get("kind", "agent-prompt"),
+                "system_prompt": system_prompt,
+                "user_message": raw["user_message"],
+                # Resolved prompt = system + user; the dispatcher will send as
+                # a two-message chat (system + user) when building the request.
+                # Stored here for traces / readability of the JSON snapshot.
+                "answer": None,
+                "domain": "agent",
+                "title": raw["id"],
+                "_system_prompt_file": raw["system_prompt_file"],
+            }
+        )
     return out
 
 
@@ -87,7 +89,8 @@ _JSON_TOOL_CALL = re.compile(
     re.IGNORECASE,
 )
 _APPLY_PATCH = re.compile(
-    r"apply_patch|\*\*\* Begin Patch", re.IGNORECASE,
+    r"apply_patch|\*\*\* Begin Patch",
+    re.IGNORECASE,
 )
 
 

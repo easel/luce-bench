@@ -86,7 +86,7 @@ def visible_text(generated: str) -> str:
     """
     close = generated.find("</think>")
     if close >= 0:
-        return generated[close + len("</think>"):]
+        return generated[close + len("</think>") :]
     return generated
 
 
@@ -108,7 +108,7 @@ def find_ds4_choice_answer(generated: str, nchoices: int) -> str:
     max_answer = chr(ord("A") + nchoices - 1)
     answer = re.search(r"answer", text, flags=re.IGNORECASE)
     if answer:
-        window = text[answer.start():answer.start() + 96]
+        window = text[answer.start() : answer.start() + 96]
         for idx, char in enumerate(window):
             candidate = char.upper()
             if "A" <= candidate <= max_answer:
@@ -144,7 +144,7 @@ def find_ds4_integer_answer(generated: str) -> str:
     text = visible_text(generated)
     answer = re.search(r"answer", text, flags=re.IGNORECASE)
     if answer:
-        window = text[answer.start():answer.start() + 160]
+        window = text[answer.start() : answer.start() + 160]
         match = re.search(r"\d+", window)
         if match:
             return normalize_integer(match.group(0))
@@ -172,7 +172,7 @@ def find_compsec_answer(generated: str) -> str:
     text = visible_text(generated)
     answer = re.search(r"answer", text, flags=re.IGNORECASE)
     if answer:
-        window = text[answer.start():answer.start() + 160]
+        window = text[answer.start() : answer.start() + 160]
         window = window.splitlines()[0]
         got = normalize_compsec_line_spec(window)
         if got != "?":
@@ -231,6 +231,7 @@ def is_ds4_eval_case(case: dict[str, Any]) -> bool:
 # hint but not a pass.
 # ──────────────────────────────────────────────────────────────────────
 
+
 def expected_answers(case: dict[str, Any]) -> list[str]:
     raw = case["answer"]
     if isinstance(raw, list):
@@ -247,8 +248,7 @@ def find_answer(case: dict[str, Any], generated: str) -> str:
     return find_ds4_integer_answer(generated)
 
 
-def _semantic_hint(case: dict[str, Any], content: str,
-                   reasoning_content: str | None) -> bool:
+def _semantic_hint(case: dict[str, Any], content: str, reasoning_content: str | None) -> bool:
     """Did the model mention an expected answer anywhere (incl. reasoning)?
 
     Diagnostic only; not used for ds4-eval pass/fail (comparability

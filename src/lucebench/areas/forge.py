@@ -65,8 +65,7 @@ def _forge_extract_timings(raw_usage: dict[str, Any] | None) -> dict[str, Any] |
     if not isinstance(timings, dict):
         return None
     out: dict[str, Any] = {}
-    for k in ("prefill_ms", "decode_ms", "decode_tokens_per_sec",
-              "prefill_tokens_per_sec"):
+    for k in ("prefill_ms", "decode_ms", "decode_tokens_per_sec", "prefill_tokens_per_sec"):
         if k in timings:
             out[k] = timings[k]
     return out or None
@@ -180,16 +179,26 @@ def run_forge_area(
             from forge_eval._forge.errors import BackendError  # type: ignore[import-not-found]
 
             kwargs = self._build_kwargs(
-                messages, tools, passthrough, inbound_anthropic_body,
+                messages,
+                tools,
+                passthrough,
+                inbound_anthropic_body,
             )
             t0 = _time.perf_counter()
             record: dict[str, Any] = {
-                "wall_s": 0.0, "http_status": None,
-                "finish_reason": None, "stop_reason": None,
-                "prompt_tokens": None, "completion_tokens": None,
-                "tool_calls": [], "prompt": prompt_blob, "output": "",
-                "reasoning_content": "", "timings": None,
-                "raw_usage": None, "error": None,
+                "wall_s": 0.0,
+                "http_status": None,
+                "finish_reason": None,
+                "stop_reason": None,
+                "prompt_tokens": None,
+                "completion_tokens": None,
+                "tool_calls": [],
+                "prompt": prompt_blob,
+                "output": "",
+                "reasoning_content": "",
+                "timings": None,
+                "raw_usage": None,
+                "error": None,
             }
             try:
                 response = await self._client.messages.create(**kwargs)
@@ -198,9 +207,7 @@ def run_forge_area(
                 record["http_status"] = getattr(exc, "status_code", 0) or 0
                 record["error"] = f"{type(exc).__name__}: {exc}"
                 self.iteration_log.append(record)
-                raise BackendError(
-                    getattr(exc, "status_code", 0), str(exc)
-                ) from exc
+                raise BackendError(getattr(exc, "status_code", 0), str(exc)) from exc
 
             record["wall_s"] = round(_time.perf_counter() - t0, 4)
             record["http_status"] = 200
@@ -223,16 +230,18 @@ def run_forge_area(
             text_parts: list[str] = []
             tool_calls_out: list[dict[str, Any]] = []
             tool_uses_present = False
-            for block in (getattr(response, "content", None) or []):
+            for block in getattr(response, "content", None) or []:
                 btype = getattr(block, "type", None)
                 if btype == "text":
                     text_parts.append(getattr(block, "text", "") or "")
                 elif btype == "tool_use":
                     tool_uses_present = True
-                    tool_calls_out.append({
-                        "name": getattr(block, "name", None),
-                        "arguments": getattr(block, "input", None),
-                    })
+                    tool_calls_out.append(
+                        {
+                            "name": getattr(block, "name", None),
+                            "arguments": getattr(block, "input", None),
+                        }
+                    )
             text_join = "\n".join(p for p in text_parts if p)
             if tool_uses_present:
                 record["reasoning_content"] = text_join
@@ -262,8 +271,11 @@ def run_forge_area(
     n_pass = 0
     cfg = EvalConfig(
         client_factory=lambda: _RecordingAnthropicClient(
-            api_key=api_key, base_url=url.rstrip("/"),
-            model=model, max_tokens=max_tokens, timeout=timeout_s,
+            api_key=api_key,
+            base_url=url.rstrip("/"),
+            model=model,
+            max_tokens=max_tokens,
+            timeout=timeout_s,
         ),
         sampling={"temperature": 0.0, "max_tokens": max_tokens},
     )
@@ -287,26 +299,30 @@ def run_forge_area(
         total_prompt = sum(int(it.get("prompt_tokens") or 0) for it in iterations)
         total_comp = sum(int(it.get("completion_tokens") or 0) for it in iterations)
         agg_timings = _forge_aggregate_timings([it.get("timings") for it in iterations])
-        rows.append({
-            "case_id": sc.name,
-            "source": "forge",
-            "kind": "forge-scenario",
-            "pass": graded_pass,
-            "graded": {
+        rows.append(
+            {
+                "case_id": sc.name,
+                "source": "forge",
+                "kind": "forge-scenario",
                 "pass": graded_pass,
-                "given": getattr(res, "error_type", None) or "ok",
-                "correct": "no error_type",
-                "status": "passed" if graded_pass else "failed",
-            },
-            "wall_seconds": wall,
-            "iterations": iterations,
-            "prompt_tokens": total_prompt or None,
-            "completion_tokens": total_comp or None,
-            "timings": agg_timings,
-            "error": err or (res and res.error_type),
-            "http_status": 200 if graded_pass else None,
-            "finish_reason": "tool_calls" if iterations and iterations[-1].get("tool_calls") else "stop",
-        })
+                "graded": {
+                    "pass": graded_pass,
+                    "given": getattr(res, "error_type", None) or "ok",
+                    "correct": "no error_type",
+                    "status": "passed" if graded_pass else "failed",
+                },
+                "wall_seconds": wall,
+                "iterations": iterations,
+                "prompt_tokens": total_prompt or None,
+                "completion_tokens": total_comp or None,
+                "timings": agg_timings,
+                "error": err or (res and res.error_type),
+                "http_status": 200 if graded_pass else None,
+                "finish_reason": "tool_calls"
+                if iterations and iterations[-1].get("tool_calls")
+                else "stop",
+            }
+        )
 
     return rows, {
         "n_scenarios": len(rows),

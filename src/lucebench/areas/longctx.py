@@ -76,8 +76,7 @@ def _make_prompt(target_tokens: int) -> str:
     return (
         "Use the following repository context to answer the final instruction. "
         "Do not call tools for this benchmark.\n\n"
-        f"{body}\n\n"
-        + _INSTRUCTION
+        f"{body}\n\n" + _INSTRUCTION
     )
 
 
@@ -89,17 +88,19 @@ def _build_cases() -> list[dict[str, Any]]:
             label = f"{target // 1024}k"
         else:
             label = str(target)
-        cases.append({
-            "area": "longctx",
-            "source": "long-context-frontier",
-            "id": f"frontier-{label}",
-            "kind": "longctx-frontier",
-            "prompt": _make_prompt(target),
-            "answer": None,
-            "domain": "longctx",
-            "title": f"long-context frontier {label} tokens",
-            "target_tokens": target,
-        })
+        cases.append(
+            {
+                "area": "longctx",
+                "source": "long-context-frontier",
+                "id": f"frontier-{label}",
+                "kind": "longctx-frontier",
+                "prompt": _make_prompt(target),
+                "answer": None,
+                "domain": "longctx",
+                "title": f"long-context frontier {label} tokens",
+                "target_tokens": target,
+            }
+        )
     return cases
 
 

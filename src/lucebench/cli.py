@@ -25,8 +25,7 @@ from lucebench.areas import agent, ds4_eval, humaneval, longctx
 from lucebench.runner import run_case
 
 
-def resolve_model(url: str, auth_header: str = "",
-                  timeout_s: int = 10) -> str | None:
+def resolve_model(url: str, auth_header: str = "", timeout_s: int = 10) -> str | None:
     """Pick a model id by probing the server's /v1/models endpoint.
 
     Returns:
@@ -39,8 +38,9 @@ def resolve_model(url: str, auth_header: str = "",
     silently picking would mask user mistakes (e.g. forgetting to set
     --model when a gateway exposes 200+ models).
     """
-    req = urllib.request.Request(url.rstrip("/") + "/v1/models",
-                                 headers={"Accept": "application/json"})
+    req = urllib.request.Request(
+        url.rstrip("/") + "/v1/models", headers={"Accept": "application/json"}
+    )
     if auth_header:
         req.add_header("Authorization", auth_header)
     try:
@@ -56,6 +56,7 @@ def resolve_model(url: str, auth_header: str = "",
         return None
     mid = entry.get("id")
     return mid if isinstance(mid, str) and mid else None
+
 
 AREAS = {
     "ds4-eval": {
@@ -85,10 +86,14 @@ AREAS = {
 }
 
 
-def select_cases(cases: list[dict], *, questions: int | None = None,
-                 case_id: str | None = None,
-                 case_index: int | None = None,
-                 sources: list[str] | None = None) -> list[dict]:
+def select_cases(
+    cases: list[dict],
+    *,
+    questions: int | None = None,
+    case_id: str | None = None,
+    case_index: int | None = None,
+    sources: list[str] | None = None,
+) -> list[dict]:
     """Filter cases by id / index / source / count."""
     out = list(cases)
     if sources:
@@ -96,7 +101,7 @@ def select_cases(cases: list[dict], *, questions: int | None = None,
     if case_id:
         out = [c for c in out if c.get("id") == case_id]
     if case_index is not None:
-        out = out[case_index:case_index + 1] if 0 <= case_index < len(out) else []
+        out = out[case_index : case_index + 1] if 0 <= case_index < len(out) else []
     if questions:
         out = out[:questions]
     return out
@@ -111,9 +116,11 @@ def format_row(idx: int, row: dict, graded: dict) -> str:
     wall = row.get("wall_seconds") or 0
     timings = row.get("timings") or {}
     tps = timings.get("decode_tokens_per_sec") or 0
-    return (f"  {idx:3d} {verdict} {src:14s} {cid:24s} "
-            f"given={given:20s} correct={correct:20s} "
-            f"wall={wall:.2f}s {tps:.0f}tps")
+    return (
+        f"  {idx:3d} {verdict} {src:14s} {cid:24s} "
+        f"given={given:20s} correct={correct:20s} "
+        f"wall={wall:.2f}s {tps:.0f}tps"
+    )
 
 
 def _run_sweep(args) -> int:
@@ -142,34 +149,43 @@ def _run_sweep(args) -> int:
     if args.auth_env:
         token = os.environ.get(args.auth_env, "")
         if not token:
-            print(f"--auth-env {args.auth_env}: env var is empty or unset",
-                  file=sys.stderr)
+            print(f"--auth-env {args.auth_env}: env var is empty or unset", file=sys.stderr)
             return 2
         auth_header = f"Bearer {token}"
 
-    print(f"[lucebench] v{__version__} sweep name={name} "
-          f"areas={','.join(sweep_areas)} url={args.url} model={args.model} "
-          f"out={out_root}", flush=True)
+    print(
+        f"[lucebench] v{__version__} sweep name={name} "
+        f"areas={','.join(sweep_areas)} url={args.url} model={args.model} "
+        f"out={out_root}",
+        flush=True,
+    )
 
     summary_areas: list[dict[str, Any]] = []
     for area in sweep_areas:
         cfg = AREAS[area]
         cases = cfg["load"]()
         cases = select_cases(cases, questions=args.questions)
-        max_tokens = (args.max_tokens if args.max_tokens is not None
-                      else cfg["default_max_tokens"])
-        think = (args.think if args.think is not None
-                 else cfg["default_thinking"])
-        print(f"\n[lucebench] === area={area} cases={len(cases)} think={think} "
-              f"max_tokens={max_tokens} ===", flush=True)
+        max_tokens = args.max_tokens if args.max_tokens is not None else cfg["default_max_tokens"]
+        think = args.think if args.think is not None else cfg["default_thinking"]
+        print(
+            f"\n[lucebench] === area={area} cases={len(cases)} think={think} "
+            f"max_tokens={max_tokens} ===",
+            flush=True,
+        )
 
         rows: list[dict[str, Any]] = []
         for idx, case in enumerate(cases, start=1):
             row = run_case(
-                url=args.url, case=case,
-                timeout_s=args.timeout, max_tokens=max_tokens, think=think,
-                model=args.model, auth_header=auth_header,
-                temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
+                url=args.url,
+                case=case,
+                timeout_s=args.timeout,
+                max_tokens=max_tokens,
+                think=think,
+                model=args.model,
+                auth_header=auth_header,
+                temperature=args.temperature,
+                top_p=args.top_p,
+                top_k=args.top_k,
             )
             graded = cfg["grade"](case, row)
             row["pass"] = graded.get("pass", False)
@@ -182,25 +198,43 @@ def _run_sweep(args) -> int:
         walls = [r.get("wall_seconds") or 0 for r in rows]
         wall_total = sum(walls)
         wall_median = statistics.median(walls) if walls else 0
-        print(f"[lucebench] area={area} pass_rate={rate:.2f}% "
-              f"({pass_n}/{len(rows)}) wall_total={wall_total:.0f}s",
-              flush=True)
+        print(
+            f"[lucebench] area={area} pass_rate={rate:.2f}% "
+            f"({pass_n}/{len(rows)}) wall_total={wall_total:.0f}s",
+            flush=True,
+        )
 
         # Per-area JSON
         terse = [{k: v for k, v in r.items() if k != "_response"} for r in rows]
-        (out_root / f"{area}.json").write_text(json.dumps({
-            "lucebench_version": __version__,
-            "area": area, "url": args.url, "model": args.model,
-            "think": think, "max_tokens": max_tokens,
-            "n": len(rows), "pass": pass_n, "pass_rate": rate,
-            "wall_total": wall_total, "wall_median": wall_median,
-            "rows": terse,
-        }, indent=2))
-        summary_areas.append({
-            "area": area, "n": len(rows), "pass": pass_n,
-            "rate": rate, "wall_total": wall_total,
-            "wall_median": wall_median,
-        })
+        (out_root / f"{area}.json").write_text(
+            json.dumps(
+                {
+                    "lucebench_version": __version__,
+                    "area": area,
+                    "url": args.url,
+                    "model": args.model,
+                    "think": think,
+                    "max_tokens": max_tokens,
+                    "n": len(rows),
+                    "pass": pass_n,
+                    "pass_rate": rate,
+                    "wall_total": wall_total,
+                    "wall_median": wall_median,
+                    "rows": terse,
+                },
+                indent=2,
+            )
+        )
+        summary_areas.append(
+            {
+                "area": area,
+                "n": len(rows),
+                "pass": pass_n,
+                "rate": rate,
+                "wall_total": wall_total,
+                "wall_median": wall_median,
+            }
+        )
 
     # Combined summary
     summary = {
@@ -240,58 +274,99 @@ def main() -> int:
         description="Capability benchmarks for chat-completion endpoints.",
     )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    ap.add_argument("--url", "--base-url", dest="url",
-                    default="http://127.0.0.1:8080",
-                    help="Server base URL (default: http://127.0.0.1:8080).")
-    ap.add_argument("--model", default="default",
-                    help="Model identifier sent in the request body. "
-                         "When left as the literal string 'default', "
-                         "the CLI queries `<base-url>/v1/models` and "
-                         "auto-picks the single exposed model. If the "
-                         "server exposes zero or multiple, it falls back "
-                         "to the literal 'default' (which most servers "
-                         "404 on — pass --model explicitly for gateways).")
-    ap.add_argument("--area", choices=sorted(set(AREAS) | {"forge"}),
-                    help="Evaluation area to run. Required unless --sweep is set.")
-    ap.add_argument("--sweep", action="store_true",
-                    help="Run all stdlib areas (ds4-eval, code, longctx, agent) "
-                         "in sequence. Forge requires --area forge explicitly "
-                         "since it needs the [forge] extra.")
-    ap.add_argument("--name", default=None,
-                    help="Label for snapshot directory under --out-dir. "
-                         "Common pattern: machine + model tag, e.g. "
-                         "`bragi-gemma4-26b-2026-05-26`.")
-    ap.add_argument("--out-dir", type=Path, default=Path("./snapshots"),
-                    help="Root directory for sweep snapshots. Each area writes "
-                         "<out-dir>/<name>/<area>.json and a combined "
-                         "_summary.json. Default: ./snapshots")
-    ap.add_argument("--questions", type=int, default=None,
-                    help="Limit to first N cases (after other filters).")
-    ap.add_argument("--case-id", default=None,
-                    help="Run only the case with this ID.")
-    ap.add_argument("--case-index", type=int, default=None,
-                    help="Run only the case at this position (after source filter).")
-    ap.add_argument("--sources", default=None,
-                    help="Comma-separated source filter (e.g. AIME2025,GPQA Diamond).")
-    ap.add_argument("--max-tokens", type=int, default=None,
-                    help="Per-request decode cap (overrides area default).")
+    ap.add_argument(
+        "--url",
+        "--base-url",
+        dest="url",
+        default="http://127.0.0.1:8080",
+        help="Server base URL (default: http://127.0.0.1:8080).",
+    )
+    ap.add_argument(
+        "--model",
+        default="default",
+        help="Model identifier sent in the request body. "
+        "When left as the literal string 'default', "
+        "the CLI queries `<base-url>/v1/models` and "
+        "auto-picks the single exposed model. If the "
+        "server exposes zero or multiple, it falls back "
+        "to the literal 'default' (which most servers "
+        "404 on — pass --model explicitly for gateways).",
+    )
+    ap.add_argument(
+        "--area",
+        choices=sorted(set(AREAS) | {"forge"}),
+        help="Evaluation area to run. Required unless --sweep is set.",
+    )
+    ap.add_argument(
+        "--sweep",
+        action="store_true",
+        help="Run all stdlib areas (ds4-eval, code, longctx, agent) "
+        "in sequence. Forge requires --area forge explicitly "
+        "since it needs the [forge] extra.",
+    )
+    ap.add_argument(
+        "--name",
+        default=None,
+        help="Label for snapshot directory under --out-dir. "
+        "Common pattern: machine + model tag, e.g. "
+        "`bragi-gemma4-26b-2026-05-26`.",
+    )
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path("./snapshots"),
+        help="Root directory for sweep snapshots. Each area writes "
+        "<out-dir>/<name>/<area>.json and a combined "
+        "_summary.json. Default: ./snapshots",
+    )
+    ap.add_argument(
+        "--questions", type=int, default=None, help="Limit to first N cases (after other filters)."
+    )
+    ap.add_argument("--case-id", default=None, help="Run only the case with this ID.")
+    ap.add_argument(
+        "--case-index",
+        type=int,
+        default=None,
+        help="Run only the case at this position (after source filter).",
+    )
+    ap.add_argument(
+        "--sources",
+        default=None,
+        help="Comma-separated source filter (e.g. AIME2025,GPQA Diamond).",
+    )
+    ap.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="Per-request decode cap (overrides area default).",
+    )
     ap.add_argument("--think", dest="think", action="store_true", default=None)
     ap.add_argument("--no-think", dest="think", action="store_false")
     ap.add_argument("--temperature", type=float, default=None)
     ap.add_argument("--top-p", type=float, default=None)
     ap.add_argument("--top-k", type=int, default=None)
-    ap.add_argument("--timeout", type=int, default=300,
-                    help="Per-request wall timeout (s).")
-    ap.add_argument("--auth-env", default=None,
-                    help="Env var name to read auth bearer token from "
-                         "(e.g. OPENAI_API_KEY, OPENROUTER_API_KEY).")
-    ap.add_argument("--json-out", type=Path, default=None,
-                    help="Write the per-case rows as a JSON array to this path.")
-    ap.add_argument("--parallel", type=int, default=1,
-                    help="Run up to N cases concurrently. Default 1 "
-                         "(sequential). Safe to raise for stateless HTTP "
-                         "gateways (OpenRouter); leave at 1 for single-GPU "
-                         "local servers since concurrent requests just queue.")
+    ap.add_argument("--timeout", type=int, default=300, help="Per-request wall timeout (s).")
+    ap.add_argument(
+        "--auth-env",
+        default=None,
+        help="Env var name to read auth bearer token from "
+        "(e.g. OPENAI_API_KEY, OPENROUTER_API_KEY).",
+    )
+    ap.add_argument(
+        "--json-out",
+        type=Path,
+        default=None,
+        help="Write the per-case rows as a JSON array to this path.",
+    )
+    ap.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="Run up to N cases concurrently. Default 1 "
+        "(sequential). Safe to raise for stateless HTTP "
+        "gateways (OpenRouter); leave at 1 for single-GPU "
+        "local servers since concurrent requests just queue.",
+    )
     args = ap.parse_args()
     if args.parallel < 1:
         ap.error("--parallel must be >= 1")
@@ -311,14 +386,19 @@ def main() -> int:
                 auth_for_probe = f"Bearer {token}"
         resolved = resolve_model(args.url, auth_header=auth_for_probe)
         if resolved:
-            print(f"[lucebench] --model default → resolved to '{resolved}' "
-                  f"via {args.url}/v1/models", flush=True)
+            print(
+                f"[lucebench] --model default → resolved to '{resolved}' via {args.url}/v1/models",
+                flush=True,
+            )
             args.model = resolved
         else:
-            print(f"[lucebench] --model default: /v1/models at {args.url} "
-                  "didn't expose exactly one model — sending 'default' as-is. "
-                  "Most servers will 404 on this; pass --model explicitly.",
-                  file=sys.stderr, flush=True)
+            print(
+                f"[lucebench] --model default: /v1/models at {args.url} "
+                "didn't expose exactly one model — sending 'default' as-is. "
+                "Most servers will 404 on this; pass --model explicitly.",
+                file=sys.stderr,
+                flush=True,
+            )
 
     # ── Sweep mode: run all stdlib areas sequentially, write into a
     # snapshot dir keyed on --name (default: today's date + a sweep tag).
@@ -330,6 +410,7 @@ def main() -> int:
     # run_case + a grader. Dispatch early.
     if args.area == "forge":
         from lucebench.areas.forge import run_forge_area
+
         max_tokens = args.max_tokens if args.max_tokens is not None else 4096
         auth_header = ""
         if args.auth_env:
@@ -338,33 +419,50 @@ def main() -> int:
                 ap.error(f"--auth-env {args.auth_env}: env var is empty or unset")
             auth_header = f"Bearer {token}"
         rows, summary = run_forge_area(
-            url=args.url, model=args.model, max_tokens=max_tokens,
-            timeout_s=args.timeout, auth_header=auth_header,
-            tags=None, names=None, questions=args.questions,
+            url=args.url,
+            model=args.model,
+            max_tokens=max_tokens,
+            timeout_s=args.timeout,
+            auth_header=auth_header,
+            tags=None,
+            names=None,
+            questions=args.questions,
         )
         for idx, r in enumerate(rows, start=1):
             verdict = "PASS" if r.get("pass") else "FAIL"
-            print(f"  {idx:3d} {verdict} forge   {r['case_id']:32s} "
-                  f"wall={r['wall_seconds']:.2f}s "
-                  f"calls={len(r.get('iterations') or [])}",
-                  flush=True)
-        print(f"\n[lucebench] forge pass_rate={summary['pass_rate']:.2f}% "
-              f"({summary['n_pass']}/{summary['n_scenarios']})",
-              flush=True)
+            print(
+                f"  {idx:3d} {verdict} forge   {r['case_id']:32s} "
+                f"wall={r['wall_seconds']:.2f}s "
+                f"calls={len(r.get('iterations') or [])}",
+                flush=True,
+            )
+        print(
+            f"\n[lucebench] forge pass_rate={summary['pass_rate']:.2f}% "
+            f"({summary['n_pass']}/{summary['n_scenarios']})",
+            flush=True,
+        )
         if args.json_out:
             args.json_out.parent.mkdir(parents=True, exist_ok=True)
-            args.json_out.write_text(json.dumps({
-                "lucebench_version": __version__,
-                "area": "forge", "url": args.url, "model": args.model,
-                **summary, "rows": rows,
-            }, indent=2, default=str))
+            args.json_out.write_text(
+                json.dumps(
+                    {
+                        "lucebench_version": __version__,
+                        "area": "forge",
+                        "url": args.url,
+                        "model": args.model,
+                        **summary,
+                        "rows": rows,
+                    },
+                    indent=2,
+                    default=str,
+                )
+            )
             print(f"[lucebench] wrote {len(rows)} rows to {args.json_out}", flush=True)
         return 0
 
     cfg = AREAS[args.area]
     cases = cfg["load"]()
-    sources = ([s.strip() for s in args.sources.split(",")]
-               if args.sources else None)
+    sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
     selected = select_cases(
         cases,
         questions=args.questions,
@@ -385,17 +483,25 @@ def main() -> int:
             ap.error(f"--auth-env {args.auth_env}: env var is empty or unset")
         auth_header = f"Bearer {token}"
 
-    print(f"[lucebench] v{__version__} area={args.area} cases={len(selected)} "
-          f"url={args.url} model={args.model} think={think} max_tokens={max_tokens}",
-          flush=True)
+    print(
+        f"[lucebench] v{__version__} area={args.area} cases={len(selected)} "
+        f"url={args.url} model={args.model} think={think} max_tokens={max_tokens}",
+        flush=True,
+    )
 
     def _do(idx_case):
         idx, case = idx_case
         row = run_case(
-            url=args.url, case=case,
-            timeout_s=args.timeout, max_tokens=max_tokens, think=think,
-            model=args.model, auth_header=auth_header,
-            temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
+            url=args.url,
+            case=case,
+            timeout_s=args.timeout,
+            max_tokens=max_tokens,
+            think=think,
+            model=args.model,
+            auth_header=auth_header,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            top_k=args.top_k,
         )
         graded = cfg["grade"](case, row)
         row["pass"] = graded.get("pass", False)
@@ -410,9 +516,9 @@ def main() -> int:
         # queue them. Output streams "as completed" but the JSON-out rows
         # are sorted back to selection order so snapshots stay deterministic.
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
         with ThreadPoolExecutor(max_workers=args.parallel) as pool:
-            futures = {pool.submit(_do, (i, c)): (i, c)
-                       for i, c in enumerate(selected, start=1)}
+            futures = {pool.submit(_do, (i, c)): (i, c) for i, c in enumerate(selected, start=1)}
             for fut in as_completed(futures):
                 row, graded = fut.result()
                 rows.append(row)
@@ -429,21 +535,33 @@ def main() -> int:
     pass_n = sum(1 for r in rows if r["pass"])
     rate = 100 * pass_n / len(rows) if rows else 0
     walls = [r.get("wall_seconds") or 0 for r in rows]
-    print(f"\n[lucebench] pass_rate={rate:.2f}% ({pass_n}/{len(rows)}) "
-          f"wall_total={sum(walls):.0f}s wall_median={statistics.median(walls):.1f}s",
-          flush=True)
+    print(
+        f"\n[lucebench] pass_rate={rate:.2f}% ({pass_n}/{len(rows)}) "
+        f"wall_total={sum(walls):.0f}s wall_median={statistics.median(walls):.1f}s",
+        flush=True,
+    )
 
     if args.json_out:
         # Drop the raw _response blob from JSON-out by default to keep file size sane.
         terse = [{k: v for k, v in r.items() if k != "_response"} for r in rows]
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
-        args.json_out.write_text(json.dumps({
-            "lucebench_version": __version__,
-            "area": args.area, "url": args.url, "model": args.model,
-            "think": think, "max_tokens": max_tokens,
-            "n": len(rows), "pass": pass_n, "pass_rate": rate,
-            "rows": terse,
-        }, indent=2))
+        args.json_out.write_text(
+            json.dumps(
+                {
+                    "lucebench_version": __version__,
+                    "area": args.area,
+                    "url": args.url,
+                    "model": args.model,
+                    "think": think,
+                    "max_tokens": max_tokens,
+                    "n": len(rows),
+                    "pass": pass_n,
+                    "pass_rate": rate,
+                    "rows": terse,
+                },
+                indent=2,
+            )
+        )
         print(f"[lucebench] wrote {len(rows)} rows to {args.json_out}", flush=True)
 
     return 0 if pass_n == len(rows) or os.environ.get("LUCEBENCH_PASS_RATE_GATE") is None else 1

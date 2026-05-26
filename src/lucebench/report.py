@@ -33,16 +33,19 @@ from lucebench import __version__
 def _row_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate per-case rows into a per-area stat block."""
     if not rows:
-        return {"n": 0, "pass": 0, "rate": 0.0, "wall_total": 0,
-                "wall_median": 0.0, "tok_per_s": 0.0,
-                "comp_median": 0}
+        return {
+            "n": 0,
+            "pass": 0,
+            "rate": 0.0,
+            "wall_total": 0,
+            "wall_median": 0.0,
+            "tok_per_s": 0.0,
+            "comp_median": 0,
+        }
     passes = sum(1 for r in rows if r.get("pass") or r.get("graded_pass"))
     walls = [r.get("wall_seconds") or r.get("wall_s") or 0 for r in rows]
     comp = [r.get("completion_tokens") or 0 for r in rows]
-    decode_tps = [
-        (r.get("timings") or {}).get("decode_tokens_per_sec") or 0
-        for r in rows
-    ]
+    decode_tps = [(r.get("timings") or {}).get("decode_tokens_per_sec") or 0 for r in rows]
     decode_tps = [t for t in decode_tps if t > 0]
     return {
         "n": len(rows),
@@ -85,9 +88,10 @@ def load_snapshot(path: Path) -> dict[str, dict[str, Any]]:
 
 def fmt_summary_md(name: str, snapshot: dict[str, dict[str, Any]]) -> str:
     lines = [f"# {name}", ""]
-    lines += ["| area | n | pass | rate | wall_total | wall_median | "
-              "tok/s | decode_tps (median) |",
-              "|---|---|---|---|---|---|---|---|"]
+    lines += [
+        "| area | n | pass | rate | wall_total | wall_median | tok/s | decode_tps (median) |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for area, s in sorted(snapshot.items()):
         lines.append(
             f"| {area} | {s['n']} | {s['pass']} | {s['rate']:.1f}% | "
@@ -138,10 +142,12 @@ def main() -> int:
         ),
     )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    ap.add_argument("paths", nargs="+", type=Path,
-                    help="Snapshot directories or per-area JSON files.")
-    ap.add_argument("--out", type=Path, default=None,
-                    help="Write the markdown to this file instead of stdout.")
+    ap.add_argument(
+        "paths", nargs="+", type=Path, help="Snapshot directories or per-area JSON files."
+    )
+    ap.add_argument(
+        "--out", type=Path, default=None, help="Write the markdown to this file instead of stdout."
+    )
     args = ap.parse_args()
 
     loaded = []
