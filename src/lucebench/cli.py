@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import json as _json
 import os
 import statistics
 import sys
@@ -45,7 +44,7 @@ def resolve_model(url: str, auth_header: str = "", timeout_s: int = 10) -> str |
         req.add_header("Authorization", auth_header)
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            data = _json.loads(resp.read())
+            data = json.loads(resp.read())
     except (urllib.error.URLError, OSError, ValueError):
         return None
     models = data.get("data") if isinstance(data, dict) else None
@@ -123,6 +122,45 @@ def format_row(idx: int, row: dict, graded: dict) -> str:
     )
 
 
+# Substrings in row["error"] that mean the server is unreachable — fail-fast
+# triggers on the first row matching any of these unless --no-fail-fast is set.
+_UNREACHABLE_ERRORS = (
+    "ConnectionRefusedError",
+    "ConnectionResetError",
+    "Name or service not known",
+    "Temporary failure in name resolution",
+    "No route to host",
+    "Connection refused",
+    "URLError",
+)
+
+
+def _row_is_unreachable(row: dict) -> bool:
+    """True if row["error"] looks like a connection-level failure.
+
+    Used by the sweep's fail-fast guard. Timeouts and HTTP errors are
+    deliberately excluded — those are per-request failures, not a
+    server-down signal.
+    """
+    err = row.get("error") or ""
+    return any(marker in err for marker in _UNREACHABLE_ERRORS)
+
+
+def _forge_available() -> tuple[bool, str | None]:
+    """Probe whether the `[forge]` extra is installed without importing it eagerly.
+
+    Returns (available, reason) where reason is a short string the
+    sweep prints when forge is skipped. Lazy import keeps the default
+    install free of the anthropic dep.
+    """
+    try:
+        import anthropic  # noqa: F401
+
+        return True, None
+    except ImportError:
+        return False, "anthropic SDK not installed — `pip install 'luce-bench[forge]'`"
+
+
 def _run_sweep(args) -> int:
     """Run every stdlib area in sequence, write per-area + combined JSON.
 
@@ -132,6 +170,7 @@ def _run_sweep(args) -> int:
             code.json
             longctx.json
             agent.json
+            forge.json       # only when [forge] is installed; skipped with a hint otherwise
             _summary.json    # {areas: [{area, n, pass, rate, wall_s}, ...]}
             _summary.md
     """
@@ -141,10 +180,13 @@ def _run_sweep(args) -> int:
     out_root = args.out_dir / name
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # Stdlib areas only — forge needs `[forge]` extra and a different
-    # runner path. Operators who want forge add `--area forge` after
-    # ensuring the extra is installed.
+    # Default sweep covers the stdlib areas. Forge is added when the
+    # `[forge]` extra is available; otherwise we print a "skipped"
+    # hint so users know how to opt in.
     sweep_areas = ["ds4-eval", "code", "longctx", "agent"]
+    forge_ok, forge_reason = _forge_available()
+    if forge_ok:
+        sweep_areas.append("forge")
     auth_header = ""
     if args.auth_env:
         token = os.environ.get(args.auth_env, "")
@@ -160,8 +202,72 @@ def _run_sweep(args) -> int:
         flush=True,
     )
 
+    if not forge_ok:
+        print(
+            f"[lucebench] forge: skipped — {forge_reason}",
+            file=sys.stderr,
+            flush=True,
+        )
+
     summary_areas: list[dict[str, Any]] = []
     for area in sweep_areas:
+        if area == "forge":
+            # Forge has its own runner (recording AnthropicClient), so dispatch
+            # separately. Still emit per-area JSON for symmetry with the others.
+            from lucebench.areas.forge import run_forge_area
+
+            max_tokens_forge = args.max_tokens if args.max_tokens is not None else 4096
+            print(
+                f"\n[lucebench] === area=forge max_tokens={max_tokens_forge} ===",
+                flush=True,
+            )
+            try:
+                forge_rows, forge_summary = run_forge_area(
+                    url=args.url,
+                    model=args.model,
+                    max_tokens=max_tokens_forge,
+                    timeout_s=args.timeout,
+                    auth_header=auth_header,
+                    questions=args.questions,
+                )
+            except SystemExit as exc:
+                print(f"[lucebench] forge: {exc}", file=sys.stderr, flush=True)
+                continue
+            (out_root / "forge.json").write_text(
+                json.dumps(
+                    {
+                        "lucebench_version": __version__,
+                        "area": "forge",
+                        "url": args.url,
+                        "model": args.model,
+                        **forge_summary,
+                        "rows": forge_rows,
+                    },
+                    indent=2,
+                    default=str,
+                )
+            )
+            summary_areas.append(
+                {
+                    "area": "forge",
+                    "n": forge_summary.get("n_scenarios", 0),
+                    "pass": forge_summary.get("n_pass", 0),
+                    "rate": forge_summary.get("pass_rate", 0.0),
+                    "wall_total": sum(r.get("wall_seconds") or 0 for r in forge_rows),
+                    "wall_median": (
+                        statistics.median([r.get("wall_seconds") or 0 for r in forge_rows])
+                        if forge_rows
+                        else 0
+                    ),
+                }
+            )
+            print(
+                f"[lucebench] area=forge pass_rate={forge_summary.get('pass_rate', 0):.2f}% "
+                f"({forge_summary.get('n_pass', 0)}/{forge_summary.get('n_scenarios', 0)})",
+                flush=True,
+            )
+            continue
+
         cfg = AREAS[area]
         cases = cfg["load"]()
         cases = select_cases(cases, questions=args.questions)
@@ -174,6 +280,7 @@ def _run_sweep(args) -> int:
         )
 
         rows: list[dict[str, Any]] = []
+        aborted = False
         for idx, case in enumerate(cases, start=1):
             row = run_case(
                 url=args.url,
@@ -192,6 +299,22 @@ def _run_sweep(args) -> int:
             row["graded"] = graded
             rows.append(row)
             print(format_row(idx, row, graded), flush=True)
+            # Fail-fast: if the very first case looks like the server is
+            # unreachable, abort the sweep rather than wasting timeouts
+            # on the remaining ~91 cases per area * 4 areas. Skip the
+            # guard when --no-fail-fast is set (CI / chaos tests).
+            if idx == 1 and not args.no_fail_fast and _row_is_unreachable(row):
+                print(
+                    f"\n[lucebench] sweep aborted — server at {args.url} appears "
+                    f"unreachable (case 1 raised {row.get('error')!r}). "
+                    "Pass --no-fail-fast to keep going anyway.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                aborted = True
+                break
+        if aborted:
+            return 3
 
         pass_n = sum(1 for r in rows if r["pass"])
         rate = 100 * pass_n / len(rows) if rows else 0
@@ -357,6 +480,13 @@ def main() -> int:
         type=Path,
         default=None,
         help="Write the per-case rows as a JSON array to this path.",
+    )
+    ap.add_argument(
+        "--no-fail-fast",
+        action="store_true",
+        help="In --sweep mode, keep going even when the first case can't reach "
+        "the server. Default behavior aborts on connection-refused-style "
+        "errors to avoid burning ~92 timeouts per area on a typo'd URL.",
     )
     ap.add_argument(
         "--parallel",

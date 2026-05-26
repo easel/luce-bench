@@ -157,3 +157,59 @@ def test_grade_agent_codeblock_pass():
     row = {"content": "Here's a fix:\n```python\nprint('hi')\n```"}
     g = agent.grade_agent_case(case, row)
     assert g["pass"] is True
+
+
+# ────────────────────────────────────────────────────────────────────
+# Sweep helpers (v0.2.1): fail-fast detection + forge availability.
+# These are pure functions so they don't need an HTTP fixture; the
+# runner-level integration tests live in v0.2.2's test_runner.py.
+# ────────────────────────────────────────────────────────────────────
+
+
+def test_row_is_unreachable_connection_refused():
+    from lucebench.cli import _row_is_unreachable
+
+    row = {"error": "ConnectionRefusedError: [Errno 111] Connection refused"}
+    assert _row_is_unreachable(row) is True
+
+
+def test_row_is_unreachable_dns_failure():
+    from lucebench.cli import _row_is_unreachable
+
+    row = {"error": "URLError: <urlopen error [Errno -2] Name or service not known>"}
+    assert _row_is_unreachable(row) is True
+
+
+def test_row_is_unreachable_timeout_not_unreachable():
+    """Timeouts are per-request failures, NOT 'server down' signals."""
+    from lucebench.cli import _row_is_unreachable
+
+    row = {"error": "TimeoutError: timed out"}
+    assert _row_is_unreachable(row) is False
+
+
+def test_row_is_unreachable_http_500_not_unreachable():
+    from lucebench.cli import _row_is_unreachable
+
+    row = {"error": "HTTPError: HTTP Error 500: Internal Server Error"}
+    assert _row_is_unreachable(row) is False
+
+
+def test_row_is_unreachable_no_error_field():
+    from lucebench.cli import _row_is_unreachable
+
+    assert _row_is_unreachable({}) is False
+    assert _row_is_unreachable({"error": None}) is False
+    assert _row_is_unreachable({"error": ""}) is False
+
+
+def test_forge_available_returns_two_tuple():
+    """Whether anthropic is installed or not, the API shape is stable."""
+    from lucebench.cli import _forge_available
+
+    ok, reason = _forge_available()
+    assert isinstance(ok, bool)
+    if ok:
+        assert reason is None
+    else:
+        assert isinstance(reason, str) and "anthropic" in reason.lower()
