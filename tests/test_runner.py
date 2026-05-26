@@ -19,7 +19,6 @@ import io
 import json
 from unittest.mock import MagicMock, patch
 
-
 from lucebench.cli import resolve_model
 from lucebench.runner import DEFAULT_SYSTEM_PROMPT, build_prompt, run_case
 
