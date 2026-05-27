@@ -269,23 +269,27 @@ def run_forge_area(
 
     rows: list[dict[str, Any]] = []
     n_pass = 0
-    cfg = EvalConfig(
-        client_factory=lambda: _RecordingAnthropicClient(
+    # EvalConfig was refactored in the vendored forge_eval (eval_runner.py:73)
+    # to drop the client_factory and sampling fields. Build the client
+    # per-scenario in a local helper instead; run_scenario's signature is
+    # (client, scenario, config) — positional order matters.
+    cfg = EvalConfig()
+
+    def _build_client() -> "_RecordingAnthropicClient":
+        return _RecordingAnthropicClient(
             api_key=api_key,
             base_url=url.rstrip("/"),
             model=model,
             max_tokens=max_tokens,
             timeout=timeout_s,
-        ),
-        sampling={"temperature": 0.0, "max_tokens": max_tokens},
-    )
+        )
 
     for sc in scenarios:
-        client = cfg.client_factory()
+        client = _build_client()
         client.reset_log()
         t0 = _time.perf_counter()
         try:
-            res: RunResult = asyncio.run(run_scenario(sc, client, cfg))
+            res: RunResult = asyncio.run(run_scenario(client, sc, cfg))
             err = None
         except Exception as exc:
             res = None
